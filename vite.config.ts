@@ -4,5 +4,5 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/lich-su-dang-quizz/',
+  base: '/he-thong-on-tap-truc-tuyen/',
 })
