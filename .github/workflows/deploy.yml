@@ -32,6 +32,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # Set VITE_API_URL in GitHub repo Settings → Secrets → Actions
+          # e.g. https://your-backend.railway.app/api  or  https://your-backend.onrender.com/api
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
