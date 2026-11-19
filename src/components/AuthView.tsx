@@ -11,7 +11,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 import { getCachedDeviceId } from '../services/deviceSecurity';
 
 export const AuthView: React.FC = () => {
@@ -22,6 +22,19 @@ export const AuthView: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Server URL custom config
+  const [showServerConfig, setShowServerConfig] = useState(false);
+  const [serverUrl, setServerUrl] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('CUSTOM_API_URL') || getApiBaseUrl() : ''));
+
+  const handleSaveServerUrl = () => {
+    if (!serverUrl.trim()) {
+      localStorage.removeItem('CUSTOM_API_URL');
+    } else {
+      localStorage.setItem('CUSTOM_API_URL', serverUrl.trim().replace(/\/$/, ''));
+    }
+    window.location.reload();
+  };
 
   // Device status banner
   const [isDeviceMismatch, setIsDeviceMismatch] = useState(false);
@@ -121,9 +134,53 @@ export const AuthView: React.FC = () => {
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 flex items-start gap-2.5 animate-shake">
-            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-            <div className="leading-relaxed">{error}</div>
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 flex flex-col gap-2.5 animate-shake">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <div className="leading-relaxed flex-1">{error}</div>
+            </div>
+            {error.includes('API') && (
+              <button
+                type="button"
+                onClick={() => setShowServerConfig(!showServerConfig)}
+                className="self-start text-[11px] font-bold text-rose-700 underline hover:text-rose-900 cursor-pointer"
+              >
+                {showServerConfig ? '▲ Đóng cấu hình máy chủ' : '⚙️ Tùy chỉnh địa chỉ máy chủ API'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Server Config Panel */}
+        {showServerConfig && (
+          <div className="mb-6 p-4 bg-purple-50/80 border border-purple-200 rounded-2xl text-xs text-purple-900 space-y-2 animate-fadeIn">
+            <label className="block font-bold">Địa chỉ API Server (URL):</label>
+            <input
+              type="text"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(e.target.value)}
+              placeholder="https://your-backend.trycloudflare.com/api"
+              className="w-full px-3 py-2 bg-white rounded-xl border border-purple-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleSaveServerUrl}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl cursor-pointer"
+              >
+                Lưu & Tải lại
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem('CUSTOM_API_URL');
+                  window.location.reload();
+                }}
+                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl cursor-pointer"
+              >
+                Đặt lại mặc định
+              </button>
+            </div>
           </div>
         )}
 

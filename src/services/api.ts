@@ -1,8 +1,18 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' && window.location.hostname.includes('github.io')
-    ? 'https://furnishings-watch-fcc-gilbert.trycloudflare.com/api'
-    : 'http://localhost:3000/api');
+export const getApiBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('CUSTOM_API_URL');
+    if (custom) return custom.trim().replace(/\/$/, '');
+  }
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
+    return 'https://famous-untitled-subscriptions-consultation.trycloudflare.com/api';
+  }
+  return 'http://localhost:3000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   try {
