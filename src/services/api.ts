@@ -7,7 +7,7 @@ export const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '');
   }
   if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
-    return 'https://famous-untitled-subscriptions-consultation.trycloudflare.com/api';
+    return 'https://alarm-venice-nano-followed.trycloudflare.com/api';
   }
   return 'http://localhost:3000/api';
 };
