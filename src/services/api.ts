@@ -1,6 +1,28 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
+async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err: any) {
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      API_BASE_URL.startsWith('http://localhost')
+    ) {
+      throw new Error(
+        `Không thể kết nối API (${API_BASE_URL}): Website đang chạy trên HTTPS (GitHub Pages) mà chưa được cấu hình biến môi trường VITE_API_URL trỏ về máy chủ backend công khai.`
+      );
+    }
+    if (err?.message === 'Failed to fetch' || err?.name === 'TypeError') {
+      throw new Error(
+        `Không thể kết nối đến máy chủ API (${API_BASE_URL}). Vui lòng kiểm tra kết nối mạng hoặc đảm bảo máy chủ backend đang hoạt động.`
+      );
+    }
+    throw err;
+  }
+}
+
 // In-memory access token storage (Never stored in localStorage!)
 let currentAccessToken: string | null = null;
 
@@ -280,7 +302,7 @@ const authHeaders = (): Record<string, string> => {
 export const api = {
   // ==================== AUTH ====================
   async checkDevice(username: string, deviceId?: string): Promise<CheckDeviceResponse> {
-    const res = await fetch(`${API_BASE_URL}/auth/check-device`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/check-device`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, deviceId }),
@@ -302,7 +324,7 @@ export const api = {
     challenge: string;
     signature: string;
   }): Promise<AuthResponse & { device: { deviceId: string; deviceName: string } }> {
-    const res = await fetch(`${API_BASE_URL}/auth/bind-device`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/bind-device`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -332,7 +354,7 @@ export const api = {
       signature?: string;
     },
   ): Promise<AuthResponse | { mfaRequired: true; mfaTicket: string }> {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -360,7 +382,7 @@ export const api = {
   },
 
   async mfaVerify(mfaTicket: string, totpCode: string): Promise<AuthResponse> {
-    const res = await fetch(`${API_BASE_URL}/auth/mfa-verify`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/mfa-verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -380,7 +402,7 @@ export const api = {
   },
 
   async adminMfaSetup(): Promise<{ secret: string; otpauthUrl: string }> {
-    const res = await fetch(`${API_BASE_URL}/auth/admin/mfa/setup`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/admin/mfa/setup`, {
       method: 'POST',
       headers: authHeaders(),
     });
@@ -390,7 +412,7 @@ export const api = {
   },
 
   async adminMfaEnable(secret: string, totpCode: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/auth/admin/mfa/enable`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/admin/mfa/enable`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ secret, totpCode }),
@@ -401,7 +423,7 @@ export const api = {
   },
 
   async adminMfaDisable(totpCode: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/auth/admin/mfa/disable`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/admin/mfa/disable`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ totpCode }),
@@ -412,7 +434,7 @@ export const api = {
   },
 
   async refreshToken(): Promise<AuthResponse> {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -430,7 +452,7 @@ export const api = {
 
   async logout(): Promise<void> {
     try {
-      await fetch(`${API_BASE_URL}/auth/logout`, {
+      await safeFetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         headers: authHeaders(),
         credentials: 'include',
@@ -441,7 +463,7 @@ export const api = {
   },
 
   async getMe(): Promise<AuthUser> {
-    const res = await fetch(`${API_BASE_URL}/auth/me`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/me`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -455,7 +477,7 @@ export const api = {
 
   // ==================== SUBJECTS & QUIZ ====================
   async getSubjects(): Promise<SubjectItem[]> {
-    const res = await fetch(`${API_BASE_URL}/subjects`, {
+    const res = await safeFetch(`${API_BASE_URL}/subjects`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -468,7 +490,7 @@ export const api = {
   },
 
   async getSubject(slug: string): Promise<SubjectDetail> {
-    const res = await fetch(`${API_BASE_URL}/subjects/${slug}`, {
+    const res = await safeFetch(`${API_BASE_URL}/subjects/${slug}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -486,7 +508,7 @@ export const api = {
     forceNew: boolean = false,
     questionIds?: string[],
   ): Promise<QuizData> {
-    const res = await fetch(`${API_BASE_URL}/quiz/start`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/start`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ lessonId, questionCount, forceNew, questionIds }),
@@ -500,7 +522,7 @@ export const api = {
   },
 
   async getActiveAttempt(lessonId: string): Promise<QuizData | null> {
-    const res = await fetch(`${API_BASE_URL}/quiz/attempt/active/${lessonId}`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/attempt/active/${lessonId}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -519,7 +541,7 @@ export const api = {
     selectedOptionIds: string[],
   ): Promise<void> {
     try {
-      await fetch(`${API_BASE_URL}/quiz/attempt/${attemptId}/draft`, {
+      await safeFetch(`${API_BASE_URL}/quiz/attempt/${attemptId}/draft`, {
         method: 'PATCH',
         headers: authHeaders(),
         body: JSON.stringify({ questionId, selectedOptionIds }),
@@ -530,7 +552,7 @@ export const api = {
   },
 
   async getLessonQuiz(lessonId: string): Promise<QuizData> {
-    const res = await fetch(`${API_BASE_URL}/quiz/lesson/${lessonId}`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/lesson/${lessonId}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -556,7 +578,7 @@ export const api = {
     correctKey: string;
     explanation: string | null;
   }> {
-    const res = await fetch(`${API_BASE_URL}/quiz/check-answer`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/check-answer`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ lessonId, questionId, selectedKey: selectedOptionIdOrKey }),
@@ -576,7 +598,7 @@ export const api = {
       ? `${API_BASE_URL}/quiz/attempt/${attemptId}/submit`
       : `${API_BASE_URL}/quiz/submit`;
 
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ lessonId, answers, timeSpentSeconds, attemptId }),
@@ -590,7 +612,7 @@ export const api = {
   },
 
   async retryAttempt(attemptId: string): Promise<QuizData> {
-    const res = await fetch(`${API_BASE_URL}/quiz/attempt/${attemptId}/retry`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/attempt/${attemptId}/retry`, {
       method: 'POST',
       headers: authHeaders(),
     });
@@ -603,7 +625,7 @@ export const api = {
   },
 
   async getQuizHistory(): Promise<QuizAttemptHistoryItem[]> {
-    const res = await fetch(`${API_BASE_URL}/quiz/history`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/history`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -616,7 +638,7 @@ export const api = {
   },
 
   async getQuizAttemptDetail(id: string): Promise<QuizAttemptDetailResponse> {
-    const res = await fetch(`${API_BASE_URL}/quiz/attempt/${id}`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/attempt/${id}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -633,7 +655,7 @@ export const api = {
   },
 
   async deleteQuizHistory(): Promise<{ message: string; deletedCount: number }> {
-    const res = await fetch(`${API_BASE_URL}/quiz/history`, {
+    const res = await safeFetch(`${API_BASE_URL}/quiz/history`, {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -647,7 +669,7 @@ export const api = {
 
   // ==================== ADMIN: DASHBOARD ====================
   async adminGetDashboard(): Promise<AdminDashboardData> {
-    const res = await fetch(`${API_BASE_URL}/admin/dashboard`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/dashboard`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -664,7 +686,7 @@ export const api = {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
 
-    const res = await fetch(`${API_BASE_URL}/admin/users?${params.toString()}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users?${params.toString()}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -681,7 +703,7 @@ export const api = {
     password: string;
     fullName?: string;
   }): Promise<{ message: string; user: AdminUserItem; activationCode?: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(payload),
@@ -699,7 +721,7 @@ export const api = {
     transferType: 'TRANSFER' | 'RECOVERY',
     reason: string,
   ): Promise<{ message: string; activationCode: string; transferCount: number; isWarning: boolean }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/reset-device`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${userId}/reset-device`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ transferType, reason }),
@@ -710,7 +732,7 @@ export const api = {
   },
 
   async adminRevokeUserSession(userId: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/revoke-session`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${userId}/revoke-session`, {
       method: 'POST',
       headers: authHeaders(),
     });
@@ -722,7 +744,7 @@ export const api = {
   async adminGetDeviceTransfers(userId?: string): Promise<DeviceTransferAuditItem[]> {
     const params = new URLSearchParams();
     if (userId) params.append('userId', userId);
-    const res = await fetch(`${API_BASE_URL}/admin/device-transfers?${params.toString()}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/device-transfers?${params.toString()}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -735,7 +757,7 @@ export const api = {
     id: string,
     data: { fullName?: string },
   ): Promise<{ message: string; user: AdminUserItem }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${id}`, {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify(data),
@@ -747,7 +769,7 @@ export const api = {
   },
 
   async adminResetPassword(id: string, password: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${id}/reset-password`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${id}/reset-password`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ password }),
@@ -764,7 +786,7 @@ export const api = {
     id: string,
     isActive: boolean,
   ): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${id}/toggle-active`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${id}/toggle-active`, {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify({ isActive }),
@@ -778,7 +800,7 @@ export const api = {
   },
 
   async adminDeleteUser(id: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${id}`, {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -792,7 +814,7 @@ export const api = {
 
   // ==================== ADMIN: SUBJECT ACCESS & AUDIT ====================
   async adminGetUserAccess(userId: string): Promise<UserAccessDetailResponse> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/access`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${userId}/access`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -809,7 +831,7 @@ export const api = {
     subjectIds: string[],
     note?: string,
   ): Promise<{ message: string; addedCount: number; removedCount: number }> {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/access`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/users/${userId}/access`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ subjectIds, note }),
@@ -827,7 +849,7 @@ export const api = {
     subjectId: string,
     note?: string,
   ): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/grant-access`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/grant-access`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ userId, subjectId, note }),
@@ -843,7 +865,7 @@ export const api = {
     subjectId: string,
     note?: string,
   ): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/revoke-access`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/revoke-access`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ userId, subjectId, note }),
@@ -855,7 +877,7 @@ export const api = {
   },
 
   async adminGetAuditLogs(limit = 100): Promise<AuditLogItem[]> {
-    const res = await fetch(`${API_BASE_URL}/admin/audit-logs?limit=${limit}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/audit-logs?limit=${limit}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -873,7 +895,7 @@ export const api = {
     isPublished?: boolean;
     orderIndex?: number;
   }): Promise<{ message: string; subject: SubjectItem }> {
-    const res = await fetch(`${API_BASE_URL}/admin/subjects`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/subjects`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(dto),
@@ -888,7 +910,7 @@ export const api = {
     id: string,
     dto: Partial<{ title: string; description: string; isPublished: boolean; orderIndex: number }>,
   ): Promise<{ message: string; subject: SubjectItem }> {
-    const res = await fetch(`${API_BASE_URL}/admin/subjects/${id}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/subjects/${id}`, {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify(dto),
@@ -900,7 +922,7 @@ export const api = {
   },
 
   async adminTogglePublishSubject(id: string): Promise<{ message: string; subject: SubjectItem }> {
-    const res = await fetch(`${API_BASE_URL}/admin/subjects/${id}/toggle-publish`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/subjects/${id}/toggle-publish`, {
       method: 'PATCH',
       headers: authHeaders(),
     });
@@ -914,7 +936,7 @@ export const api = {
     subjectId: string,
     dto: { slug: string; title: string; lessonNumber: number; description?: string; isActive?: boolean },
   ): Promise<{ message: string; lesson: LessonDetail }> {
-    const res = await fetch(`${API_BASE_URL}/admin/subjects/${subjectId}/lessons`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/subjects/${subjectId}/lessons`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(dto),
@@ -929,7 +951,7 @@ export const api = {
     id: string,
     dto: Partial<{ title: string; description: string; lessonNumber: number; isActive: boolean }>,
   ): Promise<{ message: string; lesson: LessonDetail }> {
-    const res = await fetch(`${API_BASE_URL}/admin/lessons/${id}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/lessons/${id}`, {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify(dto),
@@ -941,7 +963,7 @@ export const api = {
   },
 
   async adminDeleteLesson(id: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/lessons/${id}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/lessons/${id}`, {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -956,7 +978,7 @@ export const api = {
     if (lessonId) params.append('lessonId', lessonId);
     if (subjectId) params.append('subjectId', subjectId);
 
-    const res = await fetch(`${API_BASE_URL}/admin/questions?${params.toString()}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/questions?${params.toString()}`, {
       method: 'GET',
       headers: authHeaders(),
     });
@@ -974,7 +996,7 @@ export const api = {
     explanation?: string;
     options: Array<{ key: string; text: string; isCorrect: boolean }>;
   }): Promise<{ message: string; question: QuizQuestion }> {
-    const res = await fetch(`${API_BASE_URL}/admin/questions`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/questions`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(dto),
@@ -986,7 +1008,7 @@ export const api = {
   },
 
   async adminDeleteQuestion(id: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/admin/questions/${id}`, {
+    const res = await safeFetch(`${API_BASE_URL}/admin/questions/${id}`, {
       method: 'DELETE',
       headers: authHeaders(),
     });
