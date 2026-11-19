@@ -1,5 +1,8 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname.includes('github.io')
+    ? 'https://furnishings-watch-fcc-gilbert.trycloudflare.com/api'
+    : 'http://localhost:3000/api');
 
 async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   try {
