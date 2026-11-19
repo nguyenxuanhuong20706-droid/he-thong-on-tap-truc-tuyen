@@ -1,43 +1,80 @@
-# Ôn tập Trắc nghiệm Lịch sử Đảng Cộng sản Việt Nam
+# Hệ Thống Ôn Tập Trực Tuyến
 
-Website luyện thi và ôn tập trắc nghiệm môn **Lịch sử Đảng Cộng sản Việt Nam**, xây dựng với React, Vite, TypeScript và Tailwind CSS.
+> Online Quiz System for Vietnamese University Courses
 
-## 🚀 Tính năng nổi bật
+**Live Demo (Frontend):** https://nguyenxuanhuong20706-droid.github.io/he-thong-on-tap-truc-tuyen/
 
-- **Giao diện hiện đại & trực quan:** Bám sát thiết kế tối giản, tông màu tím gradient hiện đại, hỗ trợ responsive trên cả máy tính, máy tính bảng và điện thoại.
-- **Trắc nghiệm phản hồi tức thì:**
-  - Nhận biết đáp án đúng/sai ngay khi chọn.
-  - Tự động hiển thị đáp án đúng nếu người dùng chọn sai.
-  - Khóa câu hỏi sau khi trả lời để tránh gian lận hoặc bấm nhầm.
-- **Tổng kết & Đánh giá kết quả:**
-  - Vòng tròn tiến độ hiển thị trực quan tỷ lệ % đúng.
-  - Thống kê chi tiết: số câu Đúng, câu Sai và Tổng số câu.
-  - Cảnh báo khi còn câu chưa hoàn thành trước khi tổng kết.
-- **Làm lại bài nhanh chóng:** Đặt lại toàn bộ dữ liệu làm bài và cuộn trang mượt mà lên đầu.
-- **Kiến trúc dữ liệu module:** Dễ dàng bổ sung thêm các bài học tiếp theo (Bài 2, Bài 3...) mà không cần sửa đổi giao diện.
+---
 
-## 🛠️ Công nghệ sử dụng
+## 📚 Môn học hiện có
 
-- [React 19](https://react.dev/)
-- [Vite](https://vitejs.dev/)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Lucide Icons](https://lucide.dev/)
+| Môn học | Số câu | Loại câu hỏi |
+|---------|--------|--------------|
+| Lịch sử Đảng Cộng sản Việt Nam | 147 | SINGLE_CHOICE, MULTIPLE_CHOICE |
+| Tiếng Anh 3 (Anh văn 3) | 270 | SINGLE_CHOICE, FILL_BLANKS, MATCHING |
+| Triết học Mác – Lênin | 266 | SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE_GROUP, FILL_BLANKS, MATCHING |
+| **Tổng** | **683** | 5 loại câu hỏi |
 
-## 💻 Hướng dẫn chạy cục bộ (Local)
+---
 
-1. **Cài đặt thư viện:**
-   ```bash
-   npm install
-   ```
+## 🏗️ Kiến trúc hệ thống
 
-2. **Chạy server phát triển:**
-   ```bash
-   npm run dev
-   ```
-   Mở trình duyệt tại [http://localhost:5173/](http://localhost:5173/).
+```
+frontend/          ← React + TypeScript + Vite (GitHub Pages)
+backend/           ← NestJS + TypeScript (self-hosted)
+  └── prisma/      ← PostgreSQL schema & migrations
+```
 
-3. **Build production:**
-   ```bash
-   npm run build
-   ```
+### Frontend (GitHub Pages)
+- Tự động deploy qua GitHub Actions khi push lên `main`
+- Base path: `/he-thong-on-tap-truc-tuyen/`
+- Gọi API tới backend qua biến môi trường `VITE_API_URL`
+
+### Backend (NestJS – cần tự deploy)
+Xem hướng dẫn chi tiết: [backend/README.md](backend/README.md)
+
+---
+
+## 🚀 Chạy local
+
+### Yêu cầu
+- Node.js 20+
+- PostgreSQL 16+ (hoặc Docker)
+
+### Frontend
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+### Backend
+```bash
+cd backend
+cp .env.example .env   # Điền thông tin thực
+npm install
+npx prisma migrate deploy
+npm run start:dev  # http://localhost:3000/api
+```
+
+---
+
+## ⚙️ Biến môi trường
+
+Frontend (tạo `.env.local` ở thư mục gốc):
+```
+VITE_API_URL=https://your-backend-domain.com/api
+```
+
+Backend: xem [`backend/.env.example`](backend/.env.example)
+
+---
+
+## 📋 Tính năng
+- 5 loại câu hỏi: Một lựa chọn, Nhiều lựa chọn, Nhóm Đúng/Sai, Điền khuyết, Kéo thả nối cặp
+- Chấm điểm tức thời (instant grading)
+- Xáo trộn câu hỏi và phương án thi mỗi lần thi
+- Tự động lưu nháp – khôi phục khi F5
+- Làm lại chỉ câu sai (retry wrong only)
+- Lịch sử bài thi hợp nhất (1 dòng mỗi lượt thi chính thức)
+- Bảo mật anti-cheat: không lộ đáp án qua API
+- Phân quyền ADMIN / USER, xác thực JWT
