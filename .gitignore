@@ -11,6 +11,42 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+
+# Build cache and temporary compiler artifacts
+*.tsbuildinfo
+__pycache__/
+*.pyc
+*.pyo
+
+# Database backups (keep local, exclude from git repo)
+backups/*.sql
+
+# Local parsed data / temp analysis files (not needed in repo)
+*_parsed.json
+compare_exact_*.json
+comparison_*.json
+db_*.json
+final_*.json
+scratch_*.py
+extract_*.py
+add_question_type_test.sql
+
+# Backend one-off import / migration scripts (keep source code, exclude ad-hoc scripts)
+backend/import_*.cjs
+backend/alter_*.cjs
+backend/add_columns_*.cjs
+backend/grant_access_*.cjs
+backend/check_db_schema.cjs
+backend/check_import_result.cjs
+backend/inspect-last-result.cjs
+backend/test_*.cjs
+backend/test_alter_enum.cjs
+
+# Root-level e2e / scratch test scripts
+test-e2e-*.cjs
 
 # Editor directories and files
 .vscode/*

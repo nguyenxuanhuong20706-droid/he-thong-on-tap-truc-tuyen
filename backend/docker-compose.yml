@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ontap_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ontap_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ontap_secure_password_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-ontap_db}
+    ports:
+      - "${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - ontap_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ontap_user} -d ${POSTGRES_DB:-ontap_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ontap_pgdata:
+    name: ontap_pgdata
+

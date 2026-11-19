@@ -1,0 +1,419 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String                @id @default(uuid()) @db.Uuid
+  passwordHash         String                @map("password_hash")
+  fullName             String?               @map("full_name")
+  role                 Role                  @default(USER)
+  isActive             Boolean               @default(true) @map("is_active")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  failedLoginAttempts  Int                   @default(0) @map("failed_login_attempts")
+  lockoutUntil         DateTime?             @map("lockout_until")
+  username             String                @unique
+  deletedAt            DateTime?             @map("deleted_at")
+  deviceTransferCount  Int                   @default(0) @map("device_transfer_count")
+  isTotpEnabled        Boolean               @default(false) @map("is_totp_enabled")
+  totpSecret           String?               @map("totp_secret")
+  adminAuditLogs       AccessAuditLog[]      @relation("AuditAdmin")
+  userAuditLogs        AccessAuditLog[]      @relation("AuditTargetUser")
+  activationCodes      ActivationCode[]
+  adminDeviceTransfers DeviceTransferAudit[] @relation("AdminOperator")
+  deviceTransfers      DeviceTransferAudit[] @relation("TargetUser")
+  activatedKeys        LicenseKey[]          @relation("ActivatedByUser")
+  redemptions          LicenseRedemption[]
+  orders               Order[]
+  quizAttempts         QuizAttempt[]
+  refreshTokens        RefreshToken[]
+  sessions             Session[]
+  devices              UserDevice[]
+  userSubjectAccess    UserSubjectAccess[]
+
+  @@map("users")
+}
+
+model Session {
+  id            String         @id @default(uuid()) @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  userAgent     String?        @map("user_agent")
+  ipAddress     String?        @map("ip_address")
+  isRevoked     Boolean        @default(false) @map("is_revoked")
+  revokedAt     DateTime?      @map("revoked_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  deviceId      String?        @map("device_id")
+  refreshTokens RefreshToken[]
+  device        UserDevice?    @relation(fields: [deviceId], references: [deviceId])
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([deviceId])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  sessionId String    @map("session_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  isUsed    Boolean   @default(false) @map("is_used")
+  revokedAt DateTime? @map("revoked_at")
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Subject {
+  id                 String              @id @default(uuid()) @db.Uuid
+  slug               String              @unique
+  title              String
+  description        String?
+  isPaid             Boolean             @default(false) @map("is_paid")
+  price              Decimal             @default(0.0) @map("price") @db.Decimal(10, 2)
+  isPublished        Boolean             @default(true) @map("is_published")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  orderIndex         Int                 @default(0) @map("order_index")
+  auditLogs          AccessAuditLog[]
+  lessons            Lesson[]
+  licenseKeySubjects LicenseKeySubject[]
+  orders             Order[]
+  quizAttempts       QuizAttempt[]
+  userSubjectAccess  UserSubjectAccess[]
+
+  @@map("subjects")
+}
+
+model Lesson {
+  id           String        @id @default(uuid()) @db.Uuid
+  slug         String        @map("slug")
+  subjectId    String        @map("subject_id") @db.Uuid
+  lessonNumber Int           @map("lesson_number")
+  title        String
+  description  String?
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  subject      Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  questions    Question[]
+  quizAttempts QuizAttempt[]
+
+  @@unique([subjectId, slug])
+  @@index([subjectId])
+  @@map("lessons")
+}
+
+model Question {
+  id             String       @id @default(uuid()) @db.Uuid
+  subjectId      String       @map("subject_id") @db.Uuid
+  lessonId       String       @map("lesson_id") @db.Uuid
+  questionNumber Int          @map("question_number")
+  content        String
+  explanation    String?
+  shuffleOptions Boolean      @default(true) @map("shuffle_options")
+  questionType   QuestionType @default(SINGLE_CHOICE) @map("question_type")
+  metadata       Json?        @map("metadata")
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  options        Option[]
+  lesson         Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  quizAnswers    QuizAnswer[]
+
+  @@index([lessonId])
+  @@index([subjectId])
+  @@map("questions")
+}
+
+model Option {
+  id          String       @id @default(uuid()) @db.Uuid
+  questionId  String       @map("question_id") @db.Uuid
+  key         String
+  text        String
+  isCorrect   Boolean      @default(false) @map("is_correct")
+  question    Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  quizAnswers QuizAnswer[]
+
+  @@index([questionId])
+  @@map("options")
+}
+
+model QuizAttempt {
+  id               String        @id @default(uuid()) @db.Uuid
+  userId           String        @map("user_id") @db.Uuid
+  subjectId        String        @map("subject_id") @db.Uuid
+  lessonId         String        @map("lesson_id") @db.Uuid
+  parentAttemptId  String?       @map("parent_attempt_id") @db.Uuid
+  hasRetriedWrong  Boolean       @default(false) @map("has_retried_wrong")
+  status           AttemptStatus @default(COMPLETED) @map("status")
+  score            Float         @default(0.0)
+  correctCount     Int           @default(0) @map("correct_count")
+  wrongCount       Int           @default(0) @map("wrong_count")
+  unansweredCount  Int           @default(0) @map("unanswered_count")
+  totalQuestions   Int           @default(0) @map("total_questions")
+  timeSpentSeconds Int           @default(0) @map("time_spent_seconds")
+  snapshot         Json?         @map("snapshot")
+  draftAnswers     Json?         @map("draft_answers")
+  completedAt      DateTime      @default(now()) @map("completed_at")
+  submittedAt      DateTime?     @map("submitted_at")
+  answers          QuizAnswer[]
+  lesson           Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  subject          Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentAttempt    QuizAttempt?  @relation("AttemptRetry", fields: [parentAttemptId], references: [id], onDelete: Cascade)
+  childAttempts    QuizAttempt[] @relation("AttemptRetry")
+
+  @@index([userId])
+  @@index([subjectId])
+  @@index([lessonId])
+  @@index([parentAttemptId])
+  @@index([userId, lessonId, status])
+  @@map("quiz_attempts")
+}
+
+model QuizAnswer {
+  id                String      @id @default(uuid()) @db.Uuid
+  attemptId         String      @map("attempt_id") @db.Uuid
+  questionId        String      @map("question_id") @db.Uuid
+  selectedOptionId  String?     @map("selected_option_id") @db.Uuid
+  selectedOptionIds String[]    @default([]) @map("selected_option_ids")
+  selectedKey       String?     @map("selected_key")
+  textAnswer        String?     @map("text_answer")
+  answerData        Json?       @map("answer_data")
+  isCorrect         Boolean     @default(false) @map("is_correct")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  attempt           QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question          Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption    Option?     @relation(fields: [selectedOptionId], references: [id])
+
+  @@index([attemptId])
+  @@index([questionId])
+  @@map("quiz_answers")
+}
+
+model UserSubjectAccess {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String      @map("user_id") @db.Uuid
+  subjectId    String      @map("subject_id") @db.Uuid
+  accessType   AccessType  @default(ADMIN_GRANT) @map("access_type")
+  isActive     Boolean     @default(true) @map("is_active")
+  grantedAt    DateTime    @default(now()) @map("granted_at")
+  expiresAt    DateTime?   @map("expires_at")
+  orderId      String?     @map("order_id") @db.Uuid
+  licenseKeyId String?     @map("license_key_id") @db.Uuid
+  grantedById  String?     @map("granted_by_id") @db.Uuid
+  revokedAt    DateTime?   @map("revoked_at")
+  revokedById  String?     @map("revoked_by_id") @db.Uuid
+  licenseKey   LicenseKey? @relation(fields: [licenseKeyId], references: [id])
+  order        Order?      @relation(fields: [orderId], references: [id])
+  subject      Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectId])
+  @@index([userId])
+  @@index([subjectId])
+  @@index([isActive])
+  @@map("user_subject_access")
+}
+
+model AccessAuditLog {
+  id           String      @id @default(uuid()) @db.Uuid
+  adminId      String      @map("admin_id") @db.Uuid
+  adminName    String      @map("admin_name")
+  userId       String      @map("user_id") @db.Uuid
+  userName     String      @map("user_name")
+  subjectId    String      @map("subject_id") @db.Uuid
+  subjectTitle String      @map("subject_title")
+  action       AuditAction
+  note         String?
+  createdAt    DateTime    @default(now()) @map("created_at")
+  admin        User        @relation("AuditAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  subject      Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  user         User        @relation("AuditTargetUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([userId])
+  @@index([subjectId])
+  @@index([createdAt])
+  @@map("access_audit_logs")
+}
+
+model LicenseKey {
+  id                String              @id @default(uuid()) @db.Uuid
+  keyHash           String              @unique @map("key_hash")
+  keyMask           String              @map("key_mask")
+  durationDays      Int?                @map("duration_days")
+  isUsed            Boolean             @default(false) @map("is_used")
+  isRevoked         Boolean             @default(false) @map("is_revoked")
+  revokedAt         DateTime?           @map("revoked_at")
+  revokedReason     String?             @map("revoked_reason")
+  note              String?
+  createdBy         String              @map("created_by")
+  activatedAt       DateTime?           @map("activated_at")
+  activatedByUserId String?             @map("activated_by_user_id") @db.Uuid
+  createdAt         DateTime            @default(now()) @map("created_at")
+  subjects          LicenseKeySubject[]
+  activatedByUser   User?               @relation("ActivatedByUser", fields: [activatedByUserId], references: [id])
+  redemptions       LicenseRedemption[]
+  accessRecords     UserSubjectAccess[]
+
+  @@map("license_keys")
+}
+
+model LicenseKeySubject {
+  id           String     @id @default(uuid()) @db.Uuid
+  licenseKeyId String     @map("license_key_id") @db.Uuid
+  subjectId    String     @map("subject_id") @db.Uuid
+  licenseKey   LicenseKey @relation(fields: [licenseKeyId], references: [id], onDelete: Cascade)
+  subject      Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([licenseKeyId, subjectId])
+  @@map("license_key_subjects")
+}
+
+model LicenseRedemption {
+  id           String     @id @default(uuid()) @db.Uuid
+  licenseKeyId String     @map("license_key_id") @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  durationDays Int?       @map("duration_days")
+  redeemedAt   DateTime   @default(now()) @map("redeemed_at")
+  ipAddress    String?    @map("ip_address")
+  userAgent    String?    @map("user_agent")
+  licenseKey   LicenseKey @relation(fields: [licenseKeyId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("license_redemptions")
+}
+
+model Order {
+  id                String              @id @default(uuid()) @db.Uuid
+  code              String              @unique
+  userId            String              @map("user_id") @db.Uuid
+  subjectId         String              @map("subject_id") @db.Uuid
+  amount            Decimal             @map("amount") @db.Decimal(10, 2)
+  status            OrderStatus         @default(PENDING)
+  transferNote      String?             @map("transfer_note")
+  adminNote         String?             @map("admin_note")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  subject           Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment           Payment?
+  userSubjectAccess UserSubjectAccess[]
+
+  @@map("orders")
+}
+
+model Payment {
+  id              String   @id @default(uuid()) @db.Uuid
+  orderId         String   @unique @map("order_id") @db.Uuid
+  amount          Decimal  @map("amount") @db.Decimal(10, 2)
+  paymentMethod   String   @default("BANK_TRANSFER") @map("payment_method")
+  transactionCode String?  @map("transaction_code")
+  confirmedBy     String?  @map("confirmed_by")
+  confirmedAt     DateTime @default(now()) @map("confirmed_at")
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model UserDevice {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  deviceId   String    @unique @map("device_id")
+  deviceName String    @map("device_name")
+  publicKey  String    @map("public_key")
+  isTrusted  Boolean   @default(true) @map("is_trusted")
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  revokedAt  DateTime? @map("revoked_at")
+  revokedBy  String?   @map("revoked_by")
+  sessions   Session[]
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_devices")
+}
+
+model ActivationCode {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique
+  userId      String    @map("user_id") @db.Uuid
+  isUsed      Boolean   @default(false) @map("is_used")
+  usedAt      DateTime? @map("used_at")
+  expiresAt   DateTime  @map("expires_at")
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([code])
+  @@map("activation_codes")
+}
+
+model DeviceTransferAudit {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  oldDeviceId          String?  @map("old_device_id")
+  newDeviceId          String?  @map("new_device_id")
+  transferredByAdminId String   @map("transferred_by_admin_id") @db.Uuid
+  transferType         String   @default("TRANSFER") @map("transfer_type")
+  reason               String
+  createdAt            DateTime @default(now()) @map("created_at")
+  admin                User     @relation("AdminOperator", fields: [transferredByAdminId], references: [id], onDelete: Cascade)
+  user                 User     @relation("TargetUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("device_transfer_audits")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum AccessType {
+  FREE_ENROLLMENT
+  PURCHASED
+  ADMIN_GRANT
+  LICENSE_KEY
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REJECTED
+}
+
+enum AuditAction {
+  GRANT
+  REVOKE
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE_GROUP
+  DRAG_DROP
+  FILL_BLANKS
+  MATCHING
+}

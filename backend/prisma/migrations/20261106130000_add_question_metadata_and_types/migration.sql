@@ -1,0 +1,11 @@
+-- AlterEnum
+ALTER TYPE "QuestionType" ADD VALUE IF NOT EXISTS 'TRUE_FALSE_GROUP';
+ALTER TYPE "QuestionType" ADD VALUE IF NOT EXISTS 'DRAG_DROP';
+
+-- AlterTable
+ALTER TABLE "questions" ADD COLUMN IF NOT EXISTS "metadata" JSONB;
+
+-- AlterTable
+ALTER TABLE "quiz_answers" ADD COLUMN IF NOT EXISTS "text_answer" TEXT,
+ADD COLUMN IF NOT EXISTS "answer_data" JSONB;
+
