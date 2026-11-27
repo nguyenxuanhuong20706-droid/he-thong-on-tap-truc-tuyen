@@ -26,6 +26,5 @@ RUN npx prisma generate
 
 EXPOSE 3000
 
-# Run migrations then start
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
-
+# Start NestJS backend directly (database already synced)
+CMD ["node", "dist/main.js"]
