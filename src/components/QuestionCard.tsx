@@ -31,8 +31,40 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     question.content.toLowerCase().includes('chọn 03 đáp án') ||
     question.content.toLowerCase().includes('chọn hai đáp');
 
+  // Nhận diện dạng câu hỏi Kéo thả phân loại Đa Cột / Đa Khung
+  const multiColumnData = React.useMemo(() => {
+    const pairs = question.metadata?.pairs || review?.metadata?.pairs;
+    if (!pairs || !Array.isArray(pairs) || pairs.length === 0) return null;
+    const lefts: string[] = [];
+    for (const p of pairs) {
+      if (p.left && !lefts.includes(p.left)) {
+        lefts.push(p.left);
+      }
+    }
+    if (lefts.length < 2) return null;
+
+    const rawTokensList: string[] =
+      question.metadata?.tokens ||
+      review?.metadata?.tokens ||
+      pairs.map((p: any) => p.right).filter(Boolean);
+
+    const uniqueTokens: string[] = [];
+    for (const t of rawTokensList) {
+      if (t && !uniqueTokens.includes(t)) {
+        uniqueTokens.push(t);
+      }
+    }
+
+    return {
+      columns: lefts,
+      pairs: pairs,
+      tokens: uniqueTokens,
+    };
+  }, [question.metadata, review?.metadata]);
+
+  const isMultiColumn = Boolean(multiColumnData) || qType === 'MULTI_COLUMN_DRAG_DROP';
   const isFillBlank = qType === 'FILL_BLANKS';
-  const isMatching = qType === 'MATCHING';
+  const isMatching = (qType === 'MATCHING' || qType === 'DRAG_DROP') && !isMultiColumn;
   const isTrueFalse = qType === 'TRUE_FALSE_GROUP';
 
   // State evaluation (either from final submission or live verification)
@@ -93,14 +125,151 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     setInputText(initialText);
   }, [initialText]);
 
+  // State cho MULTI_COLUMN_DRAG_DROP (Kéo thả phân loại đa cột)
+  const parseAssignments = (): Record<string, string[]> => {
+    if (!multiColumnData) return {};
+    const map: Record<string, string[]> = {};
+    for (const col of multiColumnData.columns) {
+      map[col] = [];
+    }
+
+    const rawSrc = selectedKey || review?.selectedKey || review?.textAnswer;
+    if (!rawSrc) return map;
+
+    const rawStr = Array.isArray(rawSrc) ? rawSrc.join(' | ') : String(rawSrc);
+    if (rawStr.startsWith('{') && rawStr.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(rawStr);
+        for (const col of multiColumnData.columns) {
+          if (Array.isArray(parsed[col])) {
+            map[col] = parsed[col];
+          }
+        }
+        return map;
+      } catch {
+        // ignore
+      }
+    }
+
+    const parts = rawStr.split('|').map((s) => s.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (part.includes('->')) {
+        const [col, tok] = part.split('->').map((s) => s.trim());
+        const targetCol =
+          multiColumnData.columns.find((c) => c.toLowerCase() === col.toLowerCase()) || col;
+        if (!map[targetCol]) map[targetCol] = [];
+        if (tok && !map[targetCol].includes(tok)) {
+          map[targetCol].push(tok);
+        }
+      }
+    }
+    return map;
+  };
+
+  const [columnAssignments, setColumnAssignments] = useState<Record<string, string[]>>(parseAssignments);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [selectedPoolToken, setSelectedPoolToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    setColumnAssignments(parseAssignments());
+  }, [selectedKey, review?.selectedKey, review?.textAnswer, multiColumnData]);
+
   // Khi câu hỏi chưa làm (như khi bắt đầu làm lại câu sai / làm lượt mới), đưa mọi ô input và kéo thả về rỗng hoàn toàn
   useEffect(() => {
     if (!hasEvaluated && !selectedKey) {
       setInputText('');
       setSlottedTokens([]);
       setTfSelections({});
+      setSelectedPoolToken(null);
+      if (multiColumnData) {
+        const fresh: Record<string, string[]> = {};
+        for (const col of multiColumnData.columns) fresh[col] = [];
+        setColumnAssignments(fresh);
+      }
     }
-  }, [hasEvaluated, selectedKey, question.id]);
+  }, [hasEvaluated, selectedKey, question.id, multiColumnData]);
+
+  // Token ngân hàng trong kho chưa được gán vào cột
+  const assignedTokensSet = React.useMemo(() => {
+    const set = new Set<string>();
+    if (!multiColumnData) return set;
+    for (const col of multiColumnData.columns) {
+      for (const tok of columnAssignments[col] || []) {
+        set.add(tok);
+      }
+    }
+    return set;
+  }, [multiColumnData, columnAssignments]);
+
+  const poolTokens = React.useMemo(() => {
+    if (!multiColumnData) return [];
+    return multiColumnData.tokens.filter((tok) => !assignedTokensSet.has(tok));
+  }, [multiColumnData, assignedTokensSet]);
+
+  const moveTokenToCol = (token: string, targetCol: string, fromCol?: string) => {
+    if (hasEvaluated || !multiColumnData) return;
+    setColumnAssignments((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const col of multiColumnData.columns) {
+        next[col] = [...(prev[col] || [])];
+      }
+      if (fromCol && next[fromCol]) {
+        next[fromCol] = next[fromCol].filter((t) => t !== token);
+      }
+      if (!next[targetCol].includes(token)) {
+        next[targetCol].push(token);
+      }
+      return next;
+    });
+    setSelectedPoolToken(null);
+  };
+
+  const returnTokenToPool = (token: string, fromCol: string) => {
+    if (hasEvaluated || !multiColumnData) return;
+    setColumnAssignments((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const col of multiColumnData.columns) {
+        next[col] = [...(prev[col] || [])];
+      }
+      if (next[fromCol]) {
+        next[fromCol] = next[fromCol].filter((t) => t !== token);
+      }
+      return next;
+    });
+  };
+
+  const handleDragStart = (e: React.DragEvent, token: string, fromCol?: string) => {
+    if (hasEvaluated) return;
+    e.dataTransfer.setData('text/plain', JSON.stringify({ token, fromCol }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDropOnCol = (e: React.DragEvent, targetCol: string) => {
+    e.preventDefault();
+    setDragOverCol(null);
+    if (hasEvaluated) return;
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (data && data.token) {
+        moveTokenToCol(data.token, targetCol, data.fromCol);
+      }
+    } catch {
+      const raw = e.dataTransfer.getData('text/plain');
+      if (raw) moveTokenToCol(raw, targetCol);
+    }
+  };
+
+  const handleConfirmMultiColumn = () => {
+    if (hasEvaluated || !multiColumnData) return;
+    const pairsList: string[] = [];
+    for (const col of multiColumnData.columns) {
+      for (const tok of columnAssignments[col] || []) {
+        pairsList.push(`${col} -> ${tok}`);
+      }
+    }
+    const serialized = pairsList.join(' | ');
+    onAnswerText && onAnswerText(question.id, serialized);
+  };
 
   // State cho TRUE_FALSE_GROUP
   const [tfSelections, setTfSelections] = useState<Record<string, 'Đúng' | 'Sai'>>(() => {
@@ -208,6 +377,12 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           {isMultiple && (
             <span className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200/80 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
               Chọn nhiều đáp án
+            </span>
+          )}
+
+          {isMultiColumn && (
+            <span className="inline-block bg-purple-50 text-purple-700 border border-purple-200/80 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+              Kéo thả vào cột tương ứng
             </span>
           )}
         </div>
@@ -442,9 +617,243 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* DẠNG 3.6: MULTI_COLUMN_DRAG_DROP (Kéo thả phân loại đa cột / đa khung) */}
+      {/* ========================================================================= */}
+      {isMultiColumn && multiColumnData && (
+        <div className="space-y-6">
+          {/* Ngân hàng thẻ (Draggable Items Pool) */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                Kho thẻ đáp án ({poolTokens.length} thẻ còn lại):
+              </span>
+              {!hasEvaluated && selectedPoolToken && (
+                <span className="text-xs text-purple-600 font-semibold animate-pulse">
+                  Đã chọn 1 thẻ — Bấm vào cột muốn thả
+                </span>
+              )}
+            </div>
+
+            {poolTokens.length === 0 ? (
+              <div className="text-xs text-slate-400 italic py-2">
+                (Đã xếp toàn bộ thẻ vào các cột. Bạn có thể kéo thẻ ngược lại kho nếu muốn đổi vị trí)
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2.5">
+                {poolTokens.map((token) => {
+                  const isSelected = selectedPoolToken === token;
+                  // Nếu đã chấm điểm mà thẻ này vẫn nằm trong kho: kiểm tra xem có phải là thẻ bị bỏ quên không
+                  const expectedCol = hasEvaluated
+                    ? multiColumnData.pairs.find(
+                        (p: any) => p.right.trim().toLowerCase() === token.trim().toLowerCase()
+                      )?.left
+                    : null;
+
+                  return (
+                    <div
+                      key={token}
+                      draggable={!hasEvaluated}
+                      onDragStart={(e) => handleDragStart(e, token)}
+                      onClick={() => {
+                        if (hasEvaluated) return;
+                        setSelectedPoolToken(isSelected ? null : token);
+                      }}
+                      className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all select-none duration-150 ${
+                        hasEvaluated
+                          ? expectedCol
+                            ? 'border-2 border-dashed border-rose-400 bg-rose-50 text-rose-700 font-semibold cursor-default'
+                            : 'border border-slate-200 bg-slate-100 text-slate-400 opacity-60 cursor-default'
+                          : isSelected
+                          ? 'border-2 border-purple-600 bg-purple-50 text-purple-900 font-bold shadow-sm ring-2 ring-purple-600/20 scale-102 cursor-pointer'
+                          : 'border border-purple-200 bg-white text-slate-800 hover:border-purple-400 hover:text-purple-700 hover:shadow-xs active:scale-98 cursor-grab active:cursor-grabbing'
+                      }`}
+                      title={hasEvaluated ? (expectedCol ? `Bị bỏ sót! Đáng lẽ thuộc: ${expectedCol}` : undefined) : 'Kéo thả hoặc click để chọn'}
+                    >
+                      {token}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Các cột mục tiêu ($N$ cột) */}
+          <div
+            className={`grid grid-cols-1 ${
+              multiColumnData.columns.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'
+            } gap-4`}
+          >
+            {multiColumnData.columns.map((col) => {
+              const assigned = columnAssignments[col] || [];
+              const isOver = dragOverCol === col;
+
+              return (
+                <div
+                  key={col}
+                  onDragOver={(e) => {
+                    if (!hasEvaluated) {
+                      e.preventDefault();
+                      setDragOverCol(col);
+                    }
+                  }}
+                  onDragLeave={() => setDragOverCol(null)}
+                  onDrop={(e) => handleDropOnCol(e, col)}
+                  onClick={() => {
+                    if (!hasEvaluated && selectedPoolToken) {
+                      moveTokenToCol(selectedPoolToken, col);
+                    }
+                  }}
+                  className={`p-4 sm:p-5 rounded-2xl border-2 transition-all flex flex-col min-h-[220px] ${
+                    isOver
+                      ? 'border-purple-500 bg-purple-50/50 shadow-md ring-2 ring-purple-500/20'
+                      : 'border-slate-200/90 bg-slate-50/30'
+                  }`}
+                >
+                  {/* Tiêu đề cột */}
+                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200/80">
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                      {col}
+                    </h4>
+                    <span className="text-[11px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full shrink-0 ml-2">
+                      {assigned.length}
+                    </span>
+                  </div>
+
+                  {/* Vùng thả các thẻ trong cột */}
+                  <div className="flex-1 flex flex-col gap-2">
+                    {assigned.length === 0 ? (
+                      <div className="flex-1 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center p-4 text-center">
+                        <span className="text-xs text-slate-400 italic select-none">
+                          {hasEvaluated ? '(Không có thẻ nào)' : 'Kéo và thả các đáp án vào đây'}
+                        </span>
+                      </div>
+                    ) : (
+                      assigned.map((token) => {
+                        const isCorrectPlacement = multiColumnData.pairs.some(
+                          (p: any) =>
+                            p.left.trim().toLowerCase() === col.trim().toLowerCase() &&
+                            p.right.trim().toLowerCase() === token.trim().toLowerCase()
+                        );
+
+                        return (
+                          <div
+                            key={token}
+                            draggable={!hasEvaluated}
+                            onDragStart={(e) => handleDragStart(e, token, col)}
+                            className={`p-3 rounded-xl border text-xs sm:text-sm transition-all select-none duration-150 flex items-center justify-between gap-2 shadow-xs ${
+                              hasEvaluated
+                                ? isCorrectPlacement
+                                  ? 'border-emerald-500 bg-emerald-50 text-emerald-950 font-semibold'
+                                  : 'border-rose-400 bg-rose-50 text-rose-950 font-semibold'
+                                : 'border-purple-200 bg-white text-slate-800 hover:border-purple-400 cursor-grab active:cursor-grabbing'
+                            }`}
+                          >
+                            <span className="flex-1 leading-snug">{token}</span>
+                            {!hasEvaluated && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  returnTokenToPool(token, col);
+                                }}
+                                className="w-5 h-5 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 text-slate-400 flex items-center justify-center text-xs shrink-0 cursor-pointer transition-colors"
+                                title="Trả thẻ về kho"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Hàng điều khiển: Nút Xác nhận (khi làm bài) / Trạng thái Đúng-Sai (khi đã chấm) */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+            <span className="text-xs text-slate-500 italic">
+              {hasEvaluated
+                ? isCorrectResult
+                  ? 'Hoàn thành chính xác toàn bộ các cột!'
+                  : 'Có đáp án chưa xếp đúng cột. Xem bảng đối chiếu chuẩn bên dưới.'
+                : '* Kéo thẻ vào các cột phù hợp, có thể bỏ lẻ thẻ nếu không chắc chắn. Nhấn Xác nhận để chấm điểm.'}
+            </span>
+
+            {!hasEvaluated ? (
+              <button
+                type="button"
+                onClick={handleConfirmMultiColumn}
+                className="px-6 py-2.5 rounded-2xl font-bold text-sm bg-purple-600 hover:bg-purple-700 active:scale-95 text-white shadow-sm shadow-purple-600/20 cursor-pointer transition-all flex items-center justify-center select-none"
+              >
+                Xác nhận
+              </button>
+            ) : (
+              <div
+                className={`px-6 py-2 rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center cursor-default select-none transition-all ${
+                  isCorrectResult
+                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                    : 'bg-rose-600 text-white shadow-rose-600/20'
+                }`}
+              >
+                {isCorrectResult ? 'Đúng' : 'Sai'}
+              </div>
+            )}
+          </div>
+
+          {/* TẦNG 2: BẢNG CHUẨN ĐỐI CHIẾU (Chỉ xuất hiện khi làm SAI) */}
+          {hasEvaluated && !isCorrectResult && (
+            <div className="mt-6 pt-5 border-t border-slate-200/90 animate-fadeIn">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Bảng đối chiếu đáp án chuẩn theo từng cột:
+                </span>
+              </div>
+              <div
+                className={`grid grid-cols-1 ${
+                  multiColumnData.columns.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'
+                } gap-4`}
+              >
+                {multiColumnData.columns.map((col) => {
+                  const correctItems = multiColumnData.pairs
+                    .filter((p: any) => p.left === col)
+                    .map((p: any) => p.right);
+
+                  return (
+                    <div
+                      key={col}
+                      className="p-4 rounded-2xl bg-emerald-50/40 border border-emerald-200/90 shadow-sm"
+                    >
+                      <div className="text-xs sm:text-sm font-bold text-emerald-950 mb-3 pb-2 border-b border-emerald-200/70">
+                        {col}
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {correctItems.map((item: string, idx: number) => (
+                          <div
+                            key={idx}
+                            className="p-2.5 sm:p-3 rounded-xl bg-white border border-emerald-300 text-emerald-950 text-xs sm:text-sm font-medium shadow-xs"
+                          >
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* DẠNG 4: SINGLE_CHOICE / MULTIPLE_CHOICE (Hình 1 & 2) */}
       {/* ========================================================================= */}
-      {!isFillBlank && !isMatching && !isTrueFalse && (
+      {!isFillBlank && !isMatching && !isMultiColumn && !isTrueFalse && (
         <div className="space-y-3">
           {question.options.map((option) => {
             const displayLetter = option.displayKey || option.key;

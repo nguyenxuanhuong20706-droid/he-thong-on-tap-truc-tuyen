@@ -103,7 +103,7 @@ export interface QuizQuestion {
   displayNumber?: number;
   questionNumber: number;
   content: string;
-  questionType?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'FILL_BLANKS' | 'MATCHING' | 'TRUE_FALSE_GROUP' | 'DRAG_DROP';
+  questionType?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'FILL_BLANKS' | 'MATCHING' | 'TRUE_FALSE_GROUP' | 'DRAG_DROP' | 'MULTI_COLUMN_DRAG_DROP';
   explanation?: string;
   correctKey?: string | null;
   metadata?: any;
@@ -137,7 +137,7 @@ export interface QuizReviewItem {
   questionId: string;
   displayNumber?: number;
   questionContent: string;
-  questionType?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'FILL_BLANKS' | 'MATCHING' | 'TRUE_FALSE_GROUP' | 'DRAG_DROP';
+  questionType?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'FILL_BLANKS' | 'MATCHING' | 'TRUE_FALSE_GROUP' | 'DRAG_DROP' | 'MULTI_COLUMN_DRAG_DROP';
   selectedKey: string | null;
   selectedOptionIds?: string[];
   textAnswer?: string | null;

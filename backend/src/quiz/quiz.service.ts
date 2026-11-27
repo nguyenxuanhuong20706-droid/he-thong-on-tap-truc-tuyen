@@ -470,30 +470,63 @@ export class QuizService {
           continue;
         }
 
-        // 2. Chấm điểm MATCHING (Sắp xếp từ / Kéo thả)
+        // 2. Chấm điểm MATCHING (Sắp xếp từ / Kéo thả phân loại)
         if (realQ.questionType === 'MATCHING') {
-          const userText = typeof rawClientVal === 'string'
-            ? rawClientVal.trim()
-            : Array.isArray(rawClientVal)
-              ? rawClientVal.join(' ').trim()
-              : '';
-          const correctText = (realQ.options[0]?.text || '').trim();
-          const normalizeStr = (s: string) => (s || '').normalize('NFC').toLowerCase().replace(/[’`]/g, "'").replace(/[.,?!]/g, '').replace(/\s+/g, ' ').trim();
-          const isMatched = normalizeStr(userText) === normalizeStr(correctText);
+          const pairs = (realQ.metadata as any)?.pairs;
+          const isMultiColumn =
+            pairs &&
+            Array.isArray(pairs) &&
+            new Set(pairs.map((p: any) => p.left).filter(Boolean)).size >= 2;
 
           let isCorrect = false;
-          if (!userText) {
-            unansweredCount++;
-          } else if (isMatched) {
-            isCorrect = true;
-            correctCount++;
+          let userText = '';
+          let correctText = (realQ.options[0]?.text || '').trim();
+
+          if (isMultiColumn) {
+            userText = typeof rawClientVal === 'string'
+              ? rawClientVal.trim()
+              : Array.isArray(rawClientVal)
+                ? rawClientVal.join(' | ').trim()
+                : '';
+            const gradeRes = this.gradeMultiColumnMatching(userText, pairs);
+            if (gradeRes.unanswered) {
+              unansweredCount++;
+            } else if (gradeRes.isMatched) {
+              isCorrect = true;
+              correctCount++;
+            } else {
+              wrongCount++;
+            }
+
+            const uniqueCols = Array.from(new Set(pairs.map((p: any) => p.left)));
+            correctText = uniqueCols
+              .map((col) => {
+                const items = pairs.filter((p: any) => p.left === col).map((p: any) => p.right);
+                return `${col} [${items.join('; ')}]`;
+              })
+              .join(' | ');
           } else {
-            wrongCount++;
+            userText = typeof rawClientVal === 'string'
+              ? rawClientVal.trim()
+              : Array.isArray(rawClientVal)
+                ? rawClientVal.join(' ').trim()
+                : '';
+            const normalizeStr = (s: string) => (s || '').normalize('NFC').toLowerCase().replace(/[’`]/g, "'").replace(/[.,?!]/g, '').replace(/\s+/g, ' ').trim();
+            const isMatched = normalizeStr(userText) === normalizeStr(correctText);
+
+            if (!userText) {
+              unansweredCount++;
+            } else if (isMatched) {
+              isCorrect = true;
+              correctCount++;
+            } else {
+              wrongCount++;
+            }
           }
 
           answerRecords.push({
             questionId: sq.id,
-            questionType: realQ.questionType,
+            questionType: isMultiColumn ? 'MULTI_COLUMN_DRAG_DROP' : realQ.questionType,
             selectedOptionId: null,
             selectedOptionIds: userText ? [userText] : [],
             selectedKey: userText || null,
@@ -1047,19 +1080,34 @@ export class QuizService {
       };
     }
 
-    // 2. Live Check cho MATCHING (Kéo thả / Sắp xếp từ / Ghép cặp)
+    // 2. Live Check cho MATCHING (Kéo thả / Sắp xếp từ / Phân loại đa cột)
     if (question.questionType === 'MATCHING') {
       const userText = (selectedKeyOrOptionId || '').trim();
       const pairs = (question.metadata as any)?.pairs;
       let isMatched = false;
       let correctText = (question.options[0]?.text || '').trim();
 
-      if (pairs && Array.isArray(pairs)) {
-        // Kiểm tra ghép cặp khái niệm
-        // userText có dạng pair_id:value|pair_id:value hoặc json hoặc chuỗi đối chiếu
-        const normalizeStr = (s: string) =>
-          (s || '').normalize('NFC').toLowerCase().replace(/[’`]/g, "'").replace(/[.,?!]/g, '').replace(/\s+/g, ' ').trim();
-        isMatched = normalizeStr(userText) === normalizeStr(correctText);
+      if (pairs && Array.isArray(pairs) && new Set(pairs.map((p: any) => p.left).filter(Boolean)).size >= 2) {
+        // Phân loại đa cột / đa khung (Triết học Mác - Lênin)
+        const gradeRes = this.gradeMultiColumnMatching(userText, pairs);
+        isMatched = gradeRes.isMatched;
+
+        const uniqueCols = Array.from(new Set(pairs.map((p: any) => p.left)));
+        correctText = uniqueCols
+          .map((col) => {
+            const items = pairs.filter((p: any) => p.left === col).map((p: any) => p.right);
+            return `${col} [${items.join('; ')}]`;
+          })
+          .join(' | ');
+
+        return {
+          questionId: question.id,
+          questionType: 'MULTI_COLUMN_DRAG_DROP',
+          selectedKey: userText,
+          isCorrect: isMatched,
+          correctKey: correctText,
+          explanation: question.explanation || `Đáp án đúng: ${correctText}`,
+        };
       } else {
         // Sắp xếp từ thành câu (Anh văn 3)
         const normalizeStr = (s: string) =>
@@ -1341,6 +1389,111 @@ export class QuizService {
     return {
       message: 'Đã xóa toàn bộ lịch sử làm bài thành công',
       deletedCount: result.count,
+    };
+  }
+
+  // =========================================================================
+  // HELPER: Chấm điểm Kéo thả Phân loại Đa cột (MULTI_COLUMN_DRAG_DROP)
+  // =========================================================================
+  private gradeMultiColumnMatching(
+    userAnswerRaw: any,
+    pairs: Array<{ left: string; right: string }>,
+  ): {
+    isMatched: boolean;
+    unanswered: boolean;
+    userPairs: Array<{ left: string; right: string }>;
+    expectedPairs: Array<{ left: string; right: string }>;
+  } {
+    const normalizeStr = (s: string) =>
+      (s || '')
+        .normalize('NFC')
+        .toLowerCase()
+        .replace(/[’`]/g, "'")
+        .replace(/[.,?!]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const userPairs: Array<{ left: string; right: string }> = [];
+    if (userAnswerRaw) {
+      if (typeof userAnswerRaw === 'string') {
+        const str = userAnswerRaw.trim();
+        if (str.startsWith('{') && str.endsWith('}')) {
+          try {
+            const parsed = JSON.parse(str);
+            for (const [col, items] of Object.entries(parsed)) {
+              if (Array.isArray(items)) {
+                for (const it of items) {
+                  userPairs.push({ left: col, right: String(it) });
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (userPairs.length === 0 && str) {
+          // Chuỗi phân cách bằng dấu pipe: "Col -> Item | Col2 -> Item2"
+          const segments = str.split('|').map((s) => s.trim()).filter(Boolean);
+          for (const seg of segments) {
+            if (seg.includes('->')) {
+              const [c, it] = seg.split('->');
+              userPairs.push({ left: c.trim(), right: it.trim() });
+            }
+          }
+        }
+      } else if (Array.isArray(userAnswerRaw)) {
+        for (const item of userAnswerRaw) {
+          const str = String(item).trim();
+          if (str.includes('->')) {
+            const [c, it] = str.split('->');
+            userPairs.push({ left: c.trim(), right: it.trim() });
+          }
+        }
+      }
+    }
+
+    if (userPairs.length === 0) {
+      return {
+        isMatched: false,
+        unanswered: true,
+        userPairs: [],
+        expectedPairs: pairs,
+      };
+    }
+
+    // Tập hợp cặp đáp án chuẩn được chuẩn hóa: "col:::item"
+    const expectedSet = new Set(
+      pairs.map((p) => `${normalizeStr(p.left)}:::${normalizeStr(p.right)}`),
+    );
+    // Tập hợp cặp học viên đã kéo thả được chuẩn hóa
+    const userSet = new Set(
+      userPairs.map((p) => `${normalizeStr(p.left)}:::${normalizeStr(p.right)}`),
+    );
+
+    // 1. Kiểm tra: Tất cả các cặp chuẩn bắt buộc phải có mặt trong bài làm của học viên
+    let allExpectedPresent = true;
+    for (const exp of expectedSet) {
+      if (!userSet.has(exp)) {
+        allExpectedPresent = false;
+        break;
+      }
+    }
+
+    // 2. Kiểm tra: Không có bất kỳ thẻ nào bị kéo vào sai cột
+    let noWrongPair = true;
+    for (const u of userSet) {
+      if (!expectedSet.has(u)) {
+        noWrongPair = false;
+        break;
+      }
+    }
+
+    const isMatched = allExpectedPresent && noWrongPair;
+    return {
+      isMatched,
+      unanswered: false,
+      userPairs,
+      expectedPairs: pairs,
     };
   }
 

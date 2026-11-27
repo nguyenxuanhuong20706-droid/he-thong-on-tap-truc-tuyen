@@ -2,8 +2,8 @@
 ## (QUIZ BUSINESS RULES & SPECIFICATION)
 
 * **Mã tài liệu:** `DOC-BR-001`
-* **Phiên bản:** `1.0.0`
-* **Ngày cập nhật:** `07/11/2026`
+* **Phiên bản:** `1.1.0`
+* **Ngày cập nhật:** `27/11/2026`
 * **Trạng thái:** `BUSINESS SPECIFICATION — CHƯA TRIỂN KHAI` (Single Source of Truth)
 * **Đối tượng áp dụng:** Kỹ sư phần mềm, AI Assistant (Antigravity), Chuyên viên kiểm thử (QA/QC), Chuyên viên nhập liệu.
 
@@ -20,19 +20,20 @@ Tất cả các điều khoản trong tài liệu này được gắn nhãn minh
 ## MỤC LỤC
 1. [Thuật ngữ và Định nghĩa](#1-thuật-ngữ-và-định-nghĩa)
 2. [Triết lý Nghiệp vụ Bất biến](#2-triết-lý-nghiệp-vụ-bất-biến)
-3. [Đặc tả 5 Dạng Câu hỏi](#3-đặc-tả-5-dạng-câu-hỏi)
+3. [Đặc tả Các Dạng Câu hỏi](#3-đặc-tả-các-dạng-câu-hỏi)
    * 3.1. [Dạng 1: SINGLE_CHOICE (Trắc nghiệm 1 ý đúng)](#31-dạng-1-single_choice-trắc-nghiệm-1-ý-đúng)
    * 3.2. [Dạng 2: MULTIPLE_CHOICE (Trắc nghiệm nhiều ý đúng)](#32-dạng-2-multiple_choice-trắc-nghiệm-nhiều-ý-đúng)
    * 3.3. [Dạng 3: TRUE_FALSE_GROUP (Nhóm nhận định Đúng/Sai)](#33-dạng-3-true_false_group-nhóm-nhận-định-đúngsai)
    * 3.4. [Dạng 4: DRAG_DROP (Kéo thả / Sắp xếp câu / Điền từ)](#34-dạng-4-drag_drop-kéo-thả--sắp-xếp-câu--điền-từ)
    * 3.5. [Dạng 5: TEXT_INPUT (Nhập đáp án trực tiếp)](#35-dạng-5-text_input-nhập-đáp-án-trực-tiếp)
+   * 3.6. [Dạng 6: MULTI_COLUMN_DRAG_DROP (Kéo thả phân loại đa cột / đa khung)](#36-dạng-6-multi_column_drag_drop-kéo-thả-phân-loại-đa-cột--đa-khung)
 4. [Đặc tả Đề bài Đọc hiểu (PASSAGE)](#4-đặc-tả-đề-bài-đọc-hiểu-passage)
 5. [Nguyên tắc Xáo trộn & Bảo toàn Đáp án (Anti-tamper Shuffling)](#5-nguyên-tắc-xáo-trộn--bảo-toàn-đáp-án-anti-tamper-shuffling)
 6. [Phân định Trách nhiệm Backend & Frontend](#6-phân-định-trách-nhiệm-backend--frontend)
 7. [Vòng đời Lượt làm bài (Attempt Lifecycle)](#7-vòng-đời-lượt-làm-bài-attempt-lifecycle)
 8. [Nghiệp vụ "Làm lại câu sai" (Retry Failed Questions)](#8-nghiệp-vụ-làm-lại-câu-sai-retry-failed-questions)
 9. [Quy chuẩn Import Word & Quản trị Ngân hàng Câu hỏi](#9-quy-chuẩn-import-word--quản-trị-ngân-hàng-câu-hỏi)
-10. [Ma trận Kiểm thử Hồi quy (24 Test Cases Bắt buộc)](#10-ma-trận-kiểm-thử-hồi-quy-24-test-cases-bắt-buộc)
+10. [Ma trận Kiểm thử Hồi quy (25 Test Cases Bắt buộc)](#10-ma-trận-kiểm-thử-hồi-quy-25-test-cases-bắt-buộc)
 11. [Tiêu chí Chặn Xuất bản (Go/No-Go Gateways)](#11-tiêu-chí-chặn-xuất-bản-gono-go-gateways)
 12. [Quy định Bắt buộc Tham chiếu Tài liệu đối với Antigravity](#12-quy-định-bắt-buộc-tham-chiếu-tài-liệu-đối-với-antigravity)
 
@@ -70,7 +71,7 @@ Tất cả các điều khoản trong tài liệu này được gắn nhãn minh
 
 ---
 
-## 3. ĐẶC TẢ 5 DẠNG CÂU HỎI
+## 3. ĐẶC TẢ CÁC DẠNG CÂU HỎI
 
 ### 3.1. Dạng 1: `SINGLE_CHOICE` (Trắc nghiệm 1 ý đúng)
 
@@ -187,6 +188,49 @@ Hỗ trợ 2 biến thể nghiệp vụ:
     * Không tự sửa lỗi chính tả.
     * Không chấp nhận câu trả lời sai thành đúng.
   * **Danh sách chấp nhận (Accepted Answers):** So khớp không phân biệt hoa/thường (`case-insensitive`) với danh sách `acceptedAnswers` được lưu trữ chính thức từ file nguồn.
+
+---
+
+### 3.6. Dạng 6: `MULTI_COLUMN_DRAG_DROP` (Kéo thả phân loại đa cột / đa khung)
+
+* **Đặc điểm:** 
+  * Đề bài cung cấp một ngân hàng các thẻ nội dung (Draggable Items Pool) và $N$ cột/khung mục tiêu phân loại ($N \ge 2$, ví dụ: phân loại theo chức năng, phạm trù, nhóm mẫu thiết kế...).
+  * Mỗi cột có thể chứa 0, 1 hoặc nhiều thẻ đáp án. Số lượng thẻ giữa các cột không nhất thiết phải bằng nhau.
+  * Có thể có thẻ dư / thẻ gây nhiễu (decoy items) trong ngân hàng thẻ mà không thuộc về bất kỳ cột nào.
+* **Quy tắc thao tác kéo thả (Drag & Drop Interaction) `[CONFIRMED]`:**
+  1. Học viên dùng thao tác **kéo thả trực tiếp (HTML5 Drag & Drop / Touch Drag)** các thẻ từ ngân hàng thẻ phía trên vào các cột tương ứng bên dưới.
+  2. Hỗ trợ thao tác linh hoạt:
+     - Kéo thẻ từ ngân hàng thẻ vào cột bất kỳ.
+     - Kéo chuyển thẻ trực tiếp giữa các cột với nhau.
+     - Kéo thẻ từ trong cột trả ngược lại ngân hàng thẻ phía trên.
+  3. **Cho phép để lại thẻ dư (Spare Items Allowance):**
+     - Hệ thống KHÔNG bắt buộc học viên phải kéo hết 100% các thẻ trong ngân hàng thẻ vào các cột.
+     - Học viên được toàn quyền quyết định số lượng thẻ cần xếp (ví dụ có 5 thẻ, chỉ xếp 4 thẻ vào 2 cột và để dư 1 thẻ ở ngân hàng từ).
+  4. **Bắt buộc có nút "Xác nhận" (Explicit Confirmation Button):**
+     - **TUYỆT ĐỐI KHÔNG tự động chấm điểm khi vừa thả thẻ cuối cùng** (để tránh chấm non hoặc tạo áp lực ép học viên phải kéo hết thẻ).
+     - Chỉ khi học viên chủ động bấm nút **"Xác nhận"**, hệ thống mới ghi nhận và gửi bài làm lên máy chủ chấm điểm.
+* **Quy tắc chấm điểm tức thời & Khóa tương tác `[CONFIRMED]`:**
+  1. Khi bấm "Xác nhận", hệ thống gửi cấu trúc phân bổ các thẻ theo từng cột lên Backend chấm điểm ngay lập tức (tuân thủ nguyên tắc Chấm tức thời BR-001).
+  2. **Khóa câu hỏi ngay lập tức:** Toàn bộ thẻ và các cột bị khóa tương tác (Read-only, không thể kéo ra/vào hay chuyển cột nữa). Nút "Xác nhận" biến mất hoặc chuyển thành trạng thái đã hoàn thành.
+  3. **Nguyên tắc nhị phân BR-002:**
+     - Câu hỏi chỉ được tính là $\mathbf{CORRECT}$ khi và chỉ khi: 100% các thẻ được kéo vào đúng các cột mục tiêu theo đáp án chuẩn (không nhầm cột, không thiếu thẻ bắt buộc, không kéo thừa thẻ gây nhiễu vào cột).
+     - Sai từ 1 thẻ trở lên (kéo nhầm cột, thiếu thẻ của cột, hoặc đặt thẻ sai vào cột) $\longrightarrow$ Toàn bộ câu bị tính là $\mathbf{INCORRECT}$.
+* **Quy chuẩn hiển thị phản hồi 2 tầng (Two-Tier Clean Feedback UX) `[CONFIRMED]`:**
+  * **Tầng 1 (Khu vực bài làm của học viên):**
+    - Giữ nguyên vị trí các thẻ mà học viên đã kéo vào từng cột để học viên thấy rõ bài làm thực tế của mình.
+    - **Thẻ kéo ĐÚNG cột:** Hiển thị màu xanh lá (`border-emerald-500 bg-emerald-50 text-emerald-700`).
+    - **Thẻ kéo SAI cột:** Hiển thị màu đỏ (`border-rose-500 bg-rose-50 text-rose-700`).
+    - **Thẻ còn sót lại ở ngân hàng thẻ:** Nếu thẻ đó thực tế thuộc về một cột nào đó nhưng học viên bỏ quên, thẻ sẽ được đánh dấu viền đỏ cảnh báo.
+  * **Tầng 2 (Bảng đối chiếu đáp án chuẩn bên dưới - Chỉ xuất hiện khi có SAI SÓT):**
+    - **Khi học viên làm ĐÚNG 100%:** Toàn bộ thẻ ở Tầng 1 phủ màu xanh lá. **TUYỆT ĐỐI KHÔNG hiển thị thêm bảng đối chiếu bên dưới**, giữ giao diện gọn gàng, tinh tế.
+    - **Khi học viên làm SAI (dù chỉ 1 thẻ):** Hệ thống tự động hiển thị thêm **một bảng chuẩn đối chiếu bên dưới** gồm đầy đủ $N$ cột tương ứng với các tiêu đề chuẩn. Bên trong mỗi cột liệt kê đầy đủ, chính xác tất cả các thẻ đáp án chuẩn thuộc về cột đó.
+    - **Triết lý hiển thị sạch (Clean & Minimalist):**
+      - Không sử dụng mũi tên chỉ đường chằng chịt giữa các cột.
+      - Không gắn thêm nhãn chữ thừa đè lên thẻ học viên đã làm.
+      - Học viên nhìn vào bảng chuẩn bên dưới là tự động nhận biết ngay thẻ mình vừa làm sai thực chất thuộc về cột nào.
+* **Quy tắc Xem lại bài làm & Làm lại câu sai `[CONFIRMED]`:**
+  * **Xem lại bài làm (Review Mode):** Giữ nguyên phân bổ thẻ của học viên ở Tầng 1 (xanh/đỏ). Nếu câu làm sai, hiển thị bảng chuẩn ở Tầng 2. Toàn bộ ở trạng thái Read-only.
+  * **Làm lại câu sai (Retry Mode):** Làm sạch hoàn toàn (Clean Slate). Toàn bộ các thẻ được đưa trở về ngân hàng thẻ phía trên; tất cả $N$ cột rỗng hoàn toàn; ẩn bảng chuẩn đối chiếu; mở khóa tương tác kéo thả và nút "Xác nhận" để học viên thao tác lại từ đầu.
 
 ---
 
@@ -328,12 +372,13 @@ Tài liệu quy định cách thức xử lý cho mọi tình huống mạng và
 * **Chế độ chỉ đọc (Read-only):** Toàn bộ câu hỏi, ô chọn, ô nhập và thẻ kéo thả bị khóa hoàn toàn. Không thể chỉnh sửa hoặc gửi request chấm điểm mới.
 * **Quy tắc hiển thị kết quả cuối cùng:**
   * Nếu lượt làm bài **đã qua lần làm lại câu sai**: Chế độ xem lại hiển thị **kết quả cuối cùng của từng câu**, ưu tiên hiển thị câu trả lời đã được sửa trong lần làm lại.
-  * Hỗ trợ đầy đủ 5 dạng câu hỏi:
+  * Hỗ trợ đầy đủ các dạng câu hỏi:
     * `SINGLE_CHOICE`: Phương án chọn sai viền đỏ; phương án đúng viền xanh kèm nhãn "Đáp án đúng".
     * `MULTIPLE_CHOICE`: Hiển thị các phương án đã chọn và toàn bộ phương án đúng.
     * `TRUE_FALSE_GROUP`: Hiển thị rõ trạng thái Đúng/Sai của từng dòng nhận định con.
     * `DRAG_DROP`: Khung câu ghép hiển thị câu trả lời; nếu sai hiện `Đáp án chuẩn: ...` ở góc trên bên phải ngang hàng với "Câu X".
     * `TEXT_INPUT`: Ô input hiển thị text đã trả lời; nút bên cạnh mang trạng thái "Đúng" hoặc "Sai"; nếu sai hiện `Đáp án đúng: ...` ở góc trên bên phải.
+    * `MULTI_COLUMN_DRAG_DROP`: Giữ nguyên các thẻ đã kéo vào cột (xanh/đỏ); nếu câu sai hiển thị bảng đối chiếu chuẩn gồm $N$ cột bên dưới; không icon rườm rà.
     * `PASSAGE`: Giữ nguyên khung đề bo góc tròn bên trên, câu hỏi in đậm bên dưới.
 * **Bảo toàn:** Tuyệt đối không tạo lượt làm mới khi học viên chỉ vào xem lại bài làm.
 
@@ -442,9 +487,9 @@ Tài liệu quy định cách thức xử lý cho mọi tình huống mạng và
 
 ---
 
-## 10. MA TRẬN KIỂM THỬ HỒI QUY (24 TEST CASES BẮT BUỘC)
+## 10. MA TRẬN KIỂM THỬ HỒI QUY (25 TEST CASES BẮT BUỘC)
 
-Bất kỳ thay đổi nào liên quan đến logic thi cử, xáo trộn hoặc chấm điểm đều bắt buộc phải chạy và đạt **100% PASS** toàn bộ 24 test case dưới đây trước khi triển khai:
+Bất kỳ thay đổi nào liên quan đến logic thi cử, xáo trộn hoặc chấm điểm đều bắt buộc phải chạy và đạt **100% PASS** toàn bộ 25 test case dưới đây trước khi triển khai:
 
 | Mã Test | Tên Test Case | Điều kiện trước & Dữ liệu đầu vào | Các bước thực hiện | Kết quả kỳ vọng | Mức độ nghiêm trọng nếu fail |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -472,6 +517,7 @@ Bất kỳ thay đổi nào liên quan đến logic thi cử, xáo trộn hoặc
 | **TC-22** | Backend từ chối Option ID giả mạo | Dùng Postman gửi `optionId` của câu hỏi khác vào câu hỏi hiện tại. | Gửi request submit câu hỏi. | Backend phản hồi HTTP 400 Bad Request: "Phương án không thuộc câu hỏi này". | **CRITICAL** |
 | **TC-23** | Backend từ chối sửa câu đã chấm | Câu hỏi đã được Backend chấm và khóa. | Dùng API gửi đáp án mới đè lên câu hỏi đó. | Backend từ chối và giữ nguyên kết quả đã khóa trước đó. | **CRITICAL** |
 | **TC-24** | Đẳng thức bảo toàn tổng số câu | Kiểm tra mọi lượt làm bài đã hoàn thành trong hệ thống. | Truy vấn Database so sánh: `correctCount + wrongCount` với `totalQuestions`. | 100% các bản ghi đều có tổng khớp hoàn hảo, không lệch dù chỉ 1 câu. | **BLOCKER** |
+| **TC-25** | MULTI_COLUMN_DRAG_DROP phân loại đa cột và đối chiếu chuẩn | Câu hỏi phân loại vào 2 cột. Kéo 4 thẻ vào 2 cột (3 thẻ đúng, 1 thẻ sai cột). | Bấm nút "Xác nhận". | Hệ thống khóa tương tác; 3 thẻ đúng viền xanh, 1 thẻ sai viền đỏ; hiển thị bảng đối chiếu chuẩn 2 cột bên dưới với các thẻ đúng vị trí; tính `INCORRECT`. | **CRITICAL** |
 
 ---
 
@@ -561,6 +607,21 @@ Nếu trong tương lai, người dùng đưa ra một yêu cầu mới có dấ
   * Bắt buộc tái sử dụng 100% hệ thống quiz, randomizer, chấm điểm theo Option UUID, lưu nháp, F5 resume, nộp bài, làm lại câu sai và hợp nhất lịch sử đã nghiệm thu.
   * Tuyệt đối không tạo cơ chế làm bài hay luồng chấm điểm riêng biệt cho từng môn học.
   * Dữ liệu đề thi của mọi môn học mới phải được chuẩn hóa để thích ứng với hệ thống hiện tại, không được làm thay đổi hoặc phá vỡ các quy tắc nghiệp vụ `SINGLE_CHOICE` đã đóng băng.
+
+### BR-032 `[CONFIRMED]` Quy chuẩn Nghiệp vụ Kéo thả Phân loại Đa cột (`MULTI_COLUMN_DRAG_DROP`)
+* Dạng câu hỏi phân loại đa cột/khung mục tiêu ($N \ge 2$) tuân thủ nghiêm ngặt 4 nguyên tắc cốt lõi:
+  1. **Nút "Xác nhận" bắt buộc:** Tuyệt đối không tự động chấm khi thả thẻ cuối cùng; người dùng chủ động bấm "Xác nhận" mới chấm điểm.
+  2. **Cho phép thẻ dư / bỏ lẻ (Spare Items):** Không ép buộc học viên phải xếp hết 100% các thẻ trong ngân hàng thẻ vào cột.
+  3. **Tương tác kéo thả thực thụ:** Kéo thả linh hoạt giữa ngân hàng thẻ và các cột, cũng như hoán đổi giữa các cột.
+  4. **Hiển thị phản hồi 2 tầng tinh gọn (Two-Tier Clean Feedback UX):**
+     - **Tầng 1 (Khu vực bài làm):** Giữ nguyên các thẻ học viên đã kéo, đổi màu xanh lá (nếu đúng cột) hoặc đỏ (nếu sai cột).
+     - **Tầng 2 (Bảng chuẩn đối chiếu):** Chỉ xuất hiện khi bài làm có sai sót; hiển thị $N$ cột chuẩn với đầy đủ đáp án đúng bên dưới. Không dùng mũi tên chỉ trỏ chằng chịt, không dùng text giải thích đè lên thẻ.
+
+### BR-033 `[CONFIRMED]` Tương thích Ngược và Quy chuẩn Metadata cho Phân loại Đa cột
+* Trong cơ sở dữ liệu hiện tại, các câu hỏi phân loại đa cột thuộc môn Triết học Mác – Lênin được lưu với `questionType = 'MATCHING'`.
+* Khi hệ thống phân tích câu hỏi:
+  - Nếu `metadata.pairs` có các khóa `left` tạo thành $N \ge 2$ nhóm danh mục rõ rệt và các `right` tương ứng là các thẻ: Hệ thống tự động kích hoạt chế độ giao diện `MULTI_COLUMN_DRAG_DROP`.
+  - Các câu hỏi sắp xếp thứ tự từ ngữ đơn hàng (môn Ngoại ngữ chuyên ngành / Anh văn 3) vẫn giữ nguyên layout một hàng tuyến tính của `MATCHING`, không bị ảnh hưởng.
 
 ---
 *Tài liệu được thiết lập để bảo vệ tính toàn vẹn và chất lượng đào tạo cao nhất của Hệ thống Ôn tập Trực tuyến.*
