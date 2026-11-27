@@ -14,23 +14,23 @@ async function main() {
   const filePath = path.join(__dirname, 'seed_data_683.json');
   const seedData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
-  console.log('--- 1. XÓA SẠCH DỮ LIỆU CŨ ĐỂ KHÔNG BỊ TRÙNG LẶP ---');
+  console.log('--- 1. XÓA SẠCH DỮ LIỆU CÂU HỎI CŨ ĐỂ KHÔNG BỊ TRÙNG LẶP ---');
   await prisma.quizAnswer.deleteMany({});
   await prisma.quizAttempt.deleteMany({});
-  await prisma.userSubjectAccess.deleteMany({});
+  // BẢO VỆ TUYỆT ĐỐI: KHÔNG xóa userSubjectAccess để không làm mất môn học của người dùng
   await prisma.licenseKeySubject.deleteMany({});
   await prisma.option.deleteMany({});
   await prisma.question.deleteMany({});
   await prisma.lesson.deleteMany({});
   await prisma.subject.deleteMany({});
-  console.log('✅ Đã dọn dẹp sạch sẽ toàn bộ database!');
+  console.log('✅ Đã dọn dẹp sạch sẽ ngân hàng câu hỏi (bảo toàn tài khoản và quyền môn học)!');
 
-  console.log('--- 2. NẠP TÀI KHOẢN NGƯỜI DÙNG ---');
+  console.log('--- 2. ĐỒNG BỘ TÀI KHOẢN NGƯỜI DÙNG (BẢO TOÀN MẬT KHẨU ĐÃ ĐỔI) ---');
   for (const u of seedData.users) {
     await prisma.user.upsert({
       where: { username: u.username },
       update: {
-        passwordHash: u.passwordHash,
+        // TUYỆT ĐỐI KHÔNG ghi đè passwordHash khi update để người dùng đổi mật khẩu không bị mất
         role: u.role,
         fullName: u.fullName,
         isActive: u.isActive,
@@ -45,7 +45,7 @@ async function main() {
       },
     });
   }
-  console.log('✅ Đã nạp tài khoản người dùng!');
+  console.log('✅ Đã đồng bộ tài khoản người dùng!');
 
   console.log('--- 3. NẠP CHUẨN XÁC CÁC MÔN HỌC, BÀI HỌC VÀ CÂU HỎI ---');
   for (const s of seedData.subjects) {
