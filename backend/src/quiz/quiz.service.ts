@@ -265,7 +265,11 @@ export class QuizService {
     }
 
     const targetQuestion = snapshot.questions.find((q) => q.id === dto.questionId)!;
-    if (targetQuestion.questionType !== 'FILL_BLANKS' && targetQuestion.questionType !== 'MATCHING') {
+    if (
+      targetQuestion.questionType !== 'FILL_BLANKS' &&
+      targetQuestion.questionType !== 'MATCHING' &&
+      targetQuestion.questionType !== 'TRUE_FALSE_GROUP'
+    ) {
       const validOptionIds = new Set(targetQuestion.options.map((o) => o.id));
       for (const optId of dto.selectedOptionIds) {
         if (!validOptionIds.has(optId)) {
@@ -340,7 +344,21 @@ export class QuizService {
         const clientVal = clientAnswers[q.id] ?? draftAnswers[q.id];
         if (clientVal !== undefined && clientVal !== null) {
           const valArray = Array.isArray(clientVal) ? clientVal : [clientVal];
-          if (q.questionType !== 'FILL_BLANKS' && q.questionType !== 'MATCHING') {
+          if (q.questionType === 'TRUE_FALSE_GROUP') {
+            // Chuẩn hóa định dạng id:choice ('Đúng' hoặc 'Sai')
+            const tfTokens: string[] = [];
+            for (const val of valArray) {
+              const strVal = String(val).trim();
+              if (strVal.includes(',')) {
+                for (const part of strVal.split(',')) {
+                  if (part.trim()) tfTokens.push(part.trim());
+                }
+              } else if (strVal) {
+                tfTokens.push(strVal);
+              }
+            }
+            normalizedAnswers[q.id] = tfTokens;
+          } else if (q.questionType !== 'FILL_BLANKS' && q.questionType !== 'MATCHING') {
             const resolvedOptionIds: string[] = [];
             for (const val of valArray) {
               const strVal = String(val).trim();
@@ -497,7 +515,86 @@ export class QuizService {
           continue;
         }
 
-        // 3. Chấm điểm SINGLE_CHOICE và MULTIPLE_CHOICE
+        // 3. Chấm điểm TRUE_FALSE_GROUP (Nhóm nhận định Đúng / Sai)
+        if (realQ.questionType === 'TRUE_FALSE_GROUP') {
+          const rawTokens = normalizedAnswers[sq.id] || [];
+          const userChoicesMap = new Map<string, 'Đúng' | 'Sai'>();
+
+          for (const token of rawTokens) {
+            if (token.includes(':')) {
+              const [optId, choice] = token.split(':');
+              if (choice === 'Đúng' || choice === 'Sai') {
+                userChoicesMap.set(optId.trim(), choice);
+              }
+            } else if (token.length > 20) {
+              // Legacy format: optionId in array represents 'Đúng'
+              userChoicesMap.set(token.trim(), 'Đúng');
+            }
+          }
+
+          const isAnswered = userChoicesMap.size > 0;
+          let allCorrect = true;
+
+          for (const opt of realQ.options) {
+            const expectedChoice = opt.isCorrect ? 'Đúng' : 'Sai';
+            const userChoice = userChoicesMap.get(opt.id) || (isAnswered ? 'Sai' : undefined);
+            if (userChoice !== expectedChoice) {
+              allCorrect = false;
+            }
+          }
+
+          let isCorrect = false;
+          if (!isAnswered) {
+            unansweredCount++;
+          } else if (allCorrect) {
+            isCorrect = true;
+            correctCount++;
+          } else {
+            wrongCount++;
+          }
+
+          // Chuẩn hóa selectedOptionIds lưu dạng id:choice
+          const savedOptionIds = realQ.options.map((opt) => {
+            const choice = userChoicesMap.get(opt.id) || (isAnswered ? 'Sai' : 'Chưa chọn');
+            return `${opt.id}:${choice}`;
+          });
+
+          const correctKeyDisplay = realQ.options
+            .map((opt) => `${opt.key}: ${opt.isCorrect ? 'Đúng' : 'Sai'}`)
+            .join(' | ');
+
+          const selectedKeyDisplay = realQ.options
+            .map((opt) => `${opt.key}: ${userChoicesMap.get(opt.id) || 'Chưa chọn'}`)
+            .join(' | ');
+
+          answerRecords.push({
+            questionId: sq.id,
+            questionType: realQ.questionType,
+            selectedOptionId: null,
+            selectedOptionIds: savedOptionIds,
+            selectedKey: selectedKeyDisplay,
+            textAnswer: null,
+            isCorrect,
+            correctKey: correctKeyDisplay,
+            questionContent: sq.content,
+            explanation: realQ.explanation || sq.explanation || null,
+            displayNumber: sq.displayNumber,
+            metadata: realQ.metadata,
+            options: sq.options.map((so) => {
+              const realOpt = realQ.options.find((ro) => ro.id === so.id);
+              return {
+                id: so.id,
+                displayKey: so.displayKey,
+                key: so.key,
+                text: so.text,
+                isCorrect: realOpt ? realOpt.isCorrect : false,
+              };
+            }),
+          });
+          continue;
+        }
+
+        // 4. Chấm điểm SINGLE_CHOICE và MULTIPLE_CHOICE
         const correctOptions = realQ.options.filter((o) => o.isCorrect);
         const correctOptionIds = new Set(correctOptions.map((o) => o.id));
 
@@ -981,22 +1078,46 @@ export class QuizService {
 
     // 3. Live Check cho TRUE_FALSE_GROUP
     if (question.questionType === 'TRUE_FALSE_GROUP') {
-      const userSelectedIds = selectedKeyOrOptionId.includes(',')
+      const rawTokens = selectedKeyOrOptionId.includes(',')
         ? selectedKeyOrOptionId.split(',').map((s) => s.trim()).filter(Boolean)
         : [selectedKeyOrOptionId].filter(Boolean);
 
-      const allCorrectSelected = correctOptions.every((co) => userSelectedIds.includes(co.id));
-      const noWrongSelected = userSelectedIds.every((uid) => correctOptions.some((co) => co.id === uid));
-      const isCorrect = allCorrectSelected && noWrongSelected && userSelectedIds.length === correctOptions.length;
+      const userChoicesMap = new Map<string, 'Đúng' | 'Sai'>();
+      for (const token of rawTokens) {
+        if (token.includes(':')) {
+          const [optId, choice] = token.split(':');
+          if (choice === 'Đúng' || choice === 'Sai') {
+            userChoicesMap.set(optId.trim(), choice);
+          }
+        } else if (token.length > 20) {
+          userChoicesMap.set(token.trim(), 'Đúng');
+        }
+      }
+
+      let allCorrect = true;
+      for (const opt of question.options) {
+        const expectedChoice = opt.isCorrect ? 'Đúng' : 'Sai';
+        const userChoice = userChoicesMap.get(opt.id);
+        if (userChoice !== expectedChoice) {
+          allCorrect = false;
+        }
+      }
 
       return {
         questionId: question.id,
+        questionType: 'TRUE_FALSE_GROUP',
         selectedKey: selectedKeyOrOptionId,
-        selectedOptionIds: userSelectedIds,
-        isCorrect,
+        selectedOptionIds: rawTokens,
+        isCorrect: allCorrect,
         correctOptionIds: correctOptions.map((o) => o.id),
-        correctKey: correctOptions.map((o) => o.key).join(', ') || null,
+        correctKey: question.options.map((o) => `${o.key}: ${o.isCorrect ? 'Đúng' : 'Sai'}`).join(' | '),
         explanation: question.explanation,
+        options: question.options.map((opt) => ({
+          id: opt.id,
+          key: opt.key,
+          text: opt.text,
+          isCorrect: opt.isCorrect,
+        })),
       };
     }
 

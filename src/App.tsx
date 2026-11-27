@@ -215,7 +215,10 @@ function MainApp() {
       q?.content.toLowerCase().includes('chọn hai đáp');
 
     let nextIds: string[] = [];
-    if (isMulti) {
+    if (q?.questionType === 'TRUE_FALSE_GROUP') {
+      // Dạng TRUE_FALSE_GROUP gửi danh sách id:choice ngăn cách bởi dấu phẩy
+      nextIds = optionId.includes(',') ? optionId.split(',').map((s) => s.trim()) : [optionId.trim()];
+    } else if (isMulti) {
       const currentIds = userAnswers[questionId] || [];
       if (currentIds.includes(optionId)) {
         // Toggle OFF (deselect)
@@ -251,7 +254,20 @@ function MainApp() {
           ? 3
           : 2);
 
-      if (isMulti) {
+      if (q?.questionType === 'TRUE_FALSE_GROUP') {
+        // Chỉ gửi live check khi người học đã chọn Đúng/Sai cho tất cả các nhận định
+        if (nextIds.length === (q.options?.length || 4)) {
+          try {
+            const check = await api.checkAnswer(quizData.lesson.id, questionId, nextIds.join(','));
+            setLiveChecks((prev) => ({
+              ...prev,
+              [questionId]: check,
+            }));
+          } catch (err) {
+            console.warn('Lỗi kiểm tra live answer cho TRUE_FALSE_GROUP:', err);
+          }
+        }
+      } else if (isMulti) {
         // Khi người học chọn đủ số lượng yêu cầu (targetCount) thì tự động chấm ngay lập tức
         if (nextIds.length === targetCount) {
           try {

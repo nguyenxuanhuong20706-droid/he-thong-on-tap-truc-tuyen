@@ -583,13 +583,21 @@ export const api = {
     selectedOptionIdOrKey: string,
   ): Promise<{
     questionId: string;
+    questionType?: string;
     selectedKey?: string;
     selectedOptionId?: string;
+    selectedOptionIds?: string[];
     isCorrect: boolean;
     correctOptionId?: string | null;
     correctOptionIds?: string[];
     correctKey: string;
     explanation: string | null;
+    options?: Array<{
+      id: string;
+      key: string;
+      text: string;
+      isCorrect: boolean;
+    }>;
   }> {
     const res = await safeFetch(`${API_BASE_URL}/quiz/check-answer`, {
       method: 'POST',

@@ -106,11 +106,15 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   const [tfSelections, setTfSelections] = useState<Record<string, 'Đúng' | 'Sai'>>(() => {
     const map: Record<string, 'Đúng' | 'Sai'> = {};
     if (selectedList && selectedList.length > 0) {
-      for (const opt of question.options) {
-        if (selectedList.includes(opt.id)) {
-          map[opt.id] = 'Đúng';
-        } else if (hasEvaluated) {
-          map[opt.id] = 'Sai';
+      for (const item of selectedList) {
+        if (item.includes(':')) {
+          const [optId, val] = item.split(':');
+          if (val === 'Đúng' || val === 'Sai') {
+            map[optId] = val;
+          }
+        } else {
+          // Legacy support: optionId means 'Đúng'
+          map[item] = 'Đúng';
         }
       }
     }
@@ -122,11 +126,9 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     const next = { ...tfSelections, [optId]: val };
     setTfSelections(next);
 
-    // Khi người học đã chọn Đúng/Sai cho toàn bộ các nhận định: tự động gửi chấm ngay lập tức
-    if (Object.keys(next).length === question.options.length) {
-      const selectedTrueIds = question.options.filter((o) => next[o.id] === 'Đúng').map((o) => o.id);
-      onSelectOption && onSelectOption(question.id, selectedTrueIds.join(','));
-    }
+    // Lưu ngay lựa chọn từng câu
+    const encodedSelections = Object.entries(next).map(([id, choice]) => `${id}:${choice}`);
+    onSelectOption && onSelectOption(question.id, encodedSelections.join(','));
   };
 
   const handleConfirmInput = () => {
