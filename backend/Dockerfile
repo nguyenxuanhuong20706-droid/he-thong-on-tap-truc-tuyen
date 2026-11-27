@@ -2,8 +2,8 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies for argon2 and native modules
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+# Install build dependencies for native modules and OpenSSL
+RUN apt-get update && apt-get install -y openssl python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -18,6 +18,9 @@ RUN npm run build
 FROM node:20-slim AS runner
 
 WORKDIR /app
+
+# Install openssl runtime for Prisma on Debian
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Copy production node_modules and built code from builder
 COPY --from=builder /app/package*.json ./
